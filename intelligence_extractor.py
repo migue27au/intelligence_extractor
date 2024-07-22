@@ -3,8 +3,11 @@
 import argparse, json, requests, re
 from bs4 import BeautifulSoup
 import dns.resolver
-import shodan
+from time import sleep
+import random
 
+import shodan
+import whois
 
 # AS = Autonomous System
 # IRR = Internet Routing Registry
@@ -440,6 +443,14 @@ def intel_shodan(shodan_api_key, ip):
 		printBeauty(f"No se encontró el elemento SHODAN en la página para la IP {args.ip}.", "warning")
 		return None
 
+def intel_whois_aux(target):
+	w = whois.whois(target)
+	if len(str(w)) > 0:
+		return json.loads(str(w))
+	return None
+
+
+
 def main(args):
 	return_value = {}
 
@@ -462,6 +473,9 @@ def main(args):
 			printBeauty(f"Performing WHOIS", "info")
 			url = f"https://bgp.he.net/{args.asn}"
 			return_value["whois"] = intel_whois(url)
+		if args.whois_aux:
+			printBeauty(f"Performing WHOIS auxiliar", "info")
+			return_value["whois_aux"] = intel_whois_aux(args.asn)
 
 	elif args.domain != None:
 		return_value["Target"] = args.domain
@@ -475,6 +489,10 @@ def main(args):
 			printBeauty(f"Performing WHOIS", "info")
 			url = f"https://bgp.he.net/dns/{args.domain}"
 			return_value["whois"] = intel_whois(url)
+		if args.whois_aux:
+			printBeauty(f"Performing WHOIS auxiliar", "info")
+			return_value["whois_aux"] = intel_whois_aux(args.domain)
+
 
 	elif args.ip:
 		return_value["Target"] = args.ip
@@ -487,12 +505,24 @@ def main(args):
 		if args.whois:
 			printBeauty(f"Performing WHOIS", "info")
 			url = f"https://bgp.he.net/ip/{args.ip}"
-			return_value["whois"] = intel_whois(url)	
+			return_value["whois"] = intel_whois(url)
+		if args.whois_aux:
+			printBeauty(f"Performing WHOIS auxiliar", "info")
+			return_value["whois_aux"] = intel_whois_aux(args.ip)
 		if args.shodan != None:
 			printBeauty(f"Performing SHODAN", "info")
 			return_value["shodan"] = intel_shodan(args.shodan, args.ip)
 	
+	if args.output:
+		args.output.write(json.dumps(return_value))
 	print(json.dumps(return_value))
+
+	if args.sleep:
+		printBeauty(f"Waiting delay 5-8 s")
+		sleep(5+(random.random()*4))
+
+
+
 
 
 def parser():
@@ -506,28 +536,31 @@ def parser():
 	
 	# Grupo de parámetros opcionales
 	optional_group = parser.add_argument_group('PARAMETROS OPCIONALES')
-	optional_group.add_argument('--whois', action='store_true', help='Realiza una consulta WHOIS a la dirección IP proporcionada')
+	optional_group.add_argument('--whois', action='store_true', help='Realiza una consulta WHOIS')
+	optional_group.add_argument('--whois_aux', action='store_true', help="Realiza una consulta WHOIS auxiliar por si la anterior no devuelve resultados")
 	optional_group.add_argument('--nslookup', action='store_true', help='Realiza una consulta NSLOOKUP a muchos servidores DNS')
-	optional_group.add_argument('--reverse-nslookup', action='store_true', help='Realiza una consulta inversa NSLOOKUP a muchos servidores DNS')
+	optional_group.add_argument('--reverse_nslookup', action='store_true', help='Realiza una consulta inversa NSLOOKUP a muchos servidores DNS')
 	optional_group.add_argument('--all', action='store_true', help='Activa todas las flags anteriores')
 	optional_group.add_argument('--shodan', type=str, help='Realiza una consulta SHODAN a la dirección IP proporcionada. Requiere un API_KEY')
-	
+	optional_group.add_argument("-o", "--output", type=argparse.FileType('a'), help="Guarda la salida json al final del archivo")
+	optional_group.add_argument('--sleep', action='store_true', help='Añade un sleep aleatorio entre 5 y 8 segundos al terminar el script. Util para evitar bloqueos automáticos.')
+
 	args = parser.parse_args()
 	
 	# Verificación de que se haya proporcionado al menos un parámetro obligatorio
 	if not (args.ip or args.domain or args.asn):
 		parser.error('Se debe proporcionar al menos uno de los siguientes parámetros: -i/--ip, -d/--domain, -asn/--asn.')
+	
 	if ((args.ip and args.domain) or
 		(args.ip and args.asn) or
 		(args.domain and args.asn)):
 		parser.error('Se debe proporcionar SOLO uno de los siguientes parámetros: -i/--ip, -d/--domain, -asn/--asn.')
 
 	if args.all:
-		args.whois = True
 		args.nslookup = True
 		args.reverse_nslookup = True
 		args.whois = True
-		args.whois = True
+		args.whois_aux = True
 	
 	return args
 
