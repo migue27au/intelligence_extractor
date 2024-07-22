@@ -1,3 +1,4 @@
 dnspython
 shodan
 bs4
+python-whois
